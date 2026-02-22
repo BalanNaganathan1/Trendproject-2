@@ -1,40 +1,63 @@
 pipeline {
-  agent any
+    agent any
 
-  environment {
-    DOCKERHUB_CRED = credentials('dockerhub')
-  }
-
-  stages {
-    stage('Checkout') {
-      steps {
-        git 'https://github.com/BalanNaganathan1/Jenkinfileforproject2.git'
-      }
+    environment {
+        DOCKERHUB_CRED = credentials('dockerhub') // DockerHub credentials
     }
 
-    stage('Build Docker Image') {
-      steps {
-        sh 'docker build -t trend-app .'
-      }
+    stages {
+
+        stage('Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/senthamil-Devops/React-Trend-app.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                # Build Docker image from Dockerfile
+                docker build -t trend-react .
+                '''
+            }
+        }
+
+        stage('Push Image') {
+            steps {
+                sh '''
+                # Login to DockerHub
+                echo $DOCKERHUB_CRED_PSW | docker login -u $DOCKERHUB_CRED_USR --password-stdin
+
+                # Tag and push image
+                docker tag trend-react $DOCKERHUB_CRED_USR/trend-react:latest
+                docker push $DOCKERHUB_CRED_USR/trend-react:latest
+                '''
+            }
+        }
+
+        stage('Deploy to EKS') {
+            steps {
+                sh '''
+                # Update kubeconfig using EC2 instance role
+                aws eks update-kubeconfig --region ap-south-1 --name Trend-eks-cluster
+
+                # Apply Kubernetes manifests
+                kubectl apply -f deployment.yaml
+                kubectl apply -f service.yaml
+                '''
+            }
+        }
     }
 
-    stage('Push Image') {
-      steps {
-        sh '''
-        docker tag trend-app $DOCKERHUB_CRED_USR/trend-app:latest
-        docker push $DOCKERHUB_CRED_USR/trend-app:latest
-        '''
-      }
+    post {
+        always {
+            echo 'Pipeline finished.'
+        }
+        success {
+            echo 'Deployment succeeded!'
+        }
+        failure {
+            echo 'Deployment failed!'
+        }
     }
-
-    stage('Deploy to EKS') {
-      steps {
-        sh '''
-        kubectl apply -f deployment.yaml
-        kubectl apply -f service.yaml
-        '''
-      }
-    }
-  }
 }
-
